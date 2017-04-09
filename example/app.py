@@ -2,28 +2,53 @@ from at_rest import AtRest
 
 app = AtRest(__name__)
 
-@app.view()
+
+@app.view
 def index():
-    return ""
+    """Index page
 
-
-def a(**kwargs):
-    """ A simple method
-    @methods GET, POST
-    @type json
-    @url /
-    @uri a int
-    a is an int type specific variable
-    @uri b
-    b is a string type specific variable
-    @uri c float
-    c is a float type specific variable
-
-    @form res
-    "res" is a dictionary key. parsed as string value
-    @form code int
-    code is a  dictionary key. parsed as int value
-    :return: str
+    @response 200 normal state
     """
 
-    pass
+@app.view
+def history_list(user_id, date, page):
+    """A simple example View func.
+    Find user's post from database
+    @methods {get}
+    @url /history
+
+    @param user_id {str} User unique id.
+    @param date {str} datetime.
+    @param page {int} page number.
+
+    @response 200 This is success and return json string.
+    @response 404 This is not found history and return json string with error description.
+    """
+    return {}
+
+
+@app.view
+def login(user_id, passwd):
+    """A simple example View func for login
+    @methods {post}
+
+    @form user_id user id for login
+    @form passwd passwd for login
+
+    @response 200 This is success and return json string about user info.
+    @response 403 This is failed to login.
+    """
+    return {}
+
+@app.view
+def new_post():
+    """A simple example View func for register new post
+    @methods {put}
+
+    @header csrf csrf token for check is valid request.
+
+    @param board_id {int}
+    """
+
+
+print(app.get_flask().url_map)

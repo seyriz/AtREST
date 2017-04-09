@@ -1,31 +1,52 @@
+import importlib
+import functools
+import re
+import inspect
 import flask as fl
 
 from _view_decorator import View
 
-
 class AtRest:
 
+    _types = {
+        "str": str,
+        "string": str,
+        "int": int,
+        "integer": int,
+        "float": float,
+        "boolean": bool,
+        "bool": bool,
+        "list": list,
+        "tuple": tuple,
+        "set": set,
+        "dict": dict,
+    }
+
     app = fl.Flask
-    api_module_name = ""
-    api_modules_dir = ""
 
-    def __init__(self, import_name, api_module_name=None, api_modules_dir=None, **kwargs):
+    def __init__(self, import_name, **kwargs):
         self.app = fl.Flask(import_name=import_name, **kwargs)
-        self.api_module_name = api_module_name
-        self.api_modules_dir = api_modules_dir
 
-    def get_app(self):
+    def get_flask(self):
         """
         Get Flask app instance.
         :return: Flask app instance
         """
         return self.app
 
-    def load_modules(self):
-        pass
+    def add_custom_types(self, type_=type):
+        self._types[type_.__name__] = type_
 
-    def view(self):
-        return View
+    def view(self, f, *args, **kwargs):
+        print("view deco called")
+        @functools.wraps(f)
+        def decorator():
+            return f
+        decorator.__dict__['is_view'] = True
+        decorator.__dict__['params'] = self._process_doc(f)
+        decorator.__dict__['params']['view_func'] = decorator
+        self._add_view_func(decorator)
+        return decorator
 
     def run(self, host=None, port=None, debug=None, **options):
         """Runs the application on a local development server.
@@ -74,6 +95,16 @@ class AtRest:
         """
         self.app.run(host, port, debug, **options)
 
+    def _add_view_func(self, view):
+        if view.__dict__.get("is_view", False):
+            options = view.__dict__['params']
+            print(options)
+            rules = options['rules']
+            for rule in options['rules']:
+                self.app.add_url_rule(rule=rule, view_func=view, methods=options['methods'])
+            # rule, endpoint = None, view_func = None, ** options
+            # self.app.add_url_rule(**params)
+
     def _process_doc(self, func):
         """
         {"methods": str, "url": str, "return": type, "type": str(json or form or form-enc or xml), "form": dict, ""}
@@ -81,8 +112,69 @@ class AtRest:
         :return:
         """
         params = dict()
-        for l in func.__doc__.split("\n"):
-            li = l.strip()
-            if li.startswith("@"):
-                ps = li.split(" ")
-                param = dict(name=ps[0][1:], val=ps[1])
+        for l in inspect.getdoc(func).split("\n"):
+            if l.startswith("@methods"):
+                params['methods'] = self._parse_methods(params.get("methods", None), l)
+            elif l.startswith("@url"):
+                params['rules'] = self._parse_rules(params.get("rules", None), l)
+            elif l.startswith("@object"):
+                params['objects'] = self._parse_type_val(params.get("objects", None), l)
+            elif l.startswith("@header"):
+                params['headers'] = self._parse_type_val(params.get("headers", None), l)
+            elif l.startswith("@param"):
+                params['params'] = self._parse_type_val(params.get("params", None), l)
+            elif l.startswith("@form"):
+                params['forms'] = self._parse_type_val(params.get("forms", None), l)
+        if params.get("methods", None) is None:
+            params['methods'] = ['GET']
+        if params.get("rules", None) is None:
+            if func.__name__ == "index":
+                params['rules'] = ["/"]
+            else:
+                params['rules'] = ["/" + func.__name__]
+        self.add_rules_with_param(params.get("rules", None), params.get("params"))
+        return params
+
+    def _parse_type_val(self, list_, param):
+        if list_ is None:
+            list_ = list()
+        p_lines = param.split(" ")
+        name = p_lines[1]
+        type_match = re.compile("\{\w+\}")
+        type_r = type_match.findall(param)
+        if len(type_r):
+            type_str = type_r[0].replace("{", "").replace("}", "")
+            if type_str == "str":
+                type_str = ""
+        else:
+            type_str = ""
+        type_ = self._types.get(type_str.lower(), None)
+        list_.append([name, type_])
+        return list_
+
+    def _parse_rules(self, list_, param):
+        if list_ is None:
+            list_ = list()
+        p_lines = param.split(" ")
+        name = p_lines[1]
+        list_.append(name)
+        return list_
+
+    def _parse_methods(self, list_, param):
+        if list_ is None:
+            list_ = list()
+        method_match = re.compile("\{.+\}")
+        p_lines = method_match.findall(param)[0].replace("{", "").replace("}", "").split(",")
+        for m in p_lines:
+            list_.append(m.strip().upper())
+        return list_
+
+    def add_rules_with_param(self, list_, params):
+        if params:
+            rule_string = list_[0]
+            for p in params:
+                if p[1]:
+                    rule_string += ("/<{}{}>".format(p[1].__name__ + ":", p[0]))
+                else:
+                    rule_string += ("/<{}>".format(p[0]))
+            list_.append(rule_string)
