@@ -21,9 +21,6 @@ also supports object passing to view function parameters. This allows you to dir
 | form | form key value as parameter. | {name:type} | False | True | |
 | response | response description of view func | HTTP_status description | False | True | 200 "" |
 
-> Note
-> 1. can apply for json(application/json), xml(application/xml), form(multipart/form-data), enc_form(application/x-www-form-urlencoded)
-
 ```python
 import at_rest
 
